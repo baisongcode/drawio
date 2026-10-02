@@ -2,6 +2,14 @@
  * Copyright (c) 2020-2025, JGraph Holdings Ltd
  * Copyright (c) 2020-2025, draw.io AG
  */
+
+/*
+ * Modified 2026-10-02 by baisongcode (unofficial DeepSeek fork,
+ * https://github.com/baisongcode/drawio-desktop): added https://api.deepseek.com
+ * to the Content-Security-Policy connect-src directive injected for Electron
+ * further down in this file.
+ */
+
 /**
  * URL Parameters and protocol description are here:
  *
@@ -215,9 +223,14 @@ function mxinclude(src)
 
     if (mxIsElectron)
     {
+        // https://api.deepseek.com is allowed for the preset DeepSeek AI
+        // configuration in js/PreConfig.js. ElectronApp.js removes this meta
+        // again (it inspects only the first meta tag), but Chromium keeps
+        // enforcing a policy once an inserted meta has been processed, so the
+        // host must be listed here as well
         mxmeta(null, 'default-src \'self\'; script-src \'self\' \'sha256-6g514VrT/cZFZltSaKxIVNFF46+MFaTSDTPB8WfYK+c=\' ' +
             (urlParams['dev'] != '1' ? '' : ' \'unsafe-eval\'') + '; ' +
-            'connect-src \'self\' https://*.draw.io https://*.diagrams.net https://fonts.googleapis.com https://fonts.gstatic.com; ' +
+            'connect-src \'self\' https://api.deepseek.com https://*.draw.io https://*.diagrams.net https://fonts.googleapis.com https://fonts.gstatic.com; ' +
             'img-src * data:; media-src *; font-src * data:; frame-src \'self\'; style-src \'self\' \'unsafe-inline\' ' +
             'https://fonts.googleapis.com; base-uri \'none\';child-src \'self\';object-src \'none\';', 'Content-Security-Policy');
     }

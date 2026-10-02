@@ -2,6 +2,14 @@
  * Copyright (c) 2020-2025, JGraph Holdings Ltd
  * Copyright (c) 2020-2025, draw.io AG
  */
+
+/*
+ * Modified 2026-10-02 by baisongcode (unofficial DeepSeek fork,
+ * https://github.com/baisongcode/drawio-desktop): added https://api.deepseek.com
+ * to the Content-Security-Policy connect-src directive added in the App.main
+ * override below.
+ */
+
 window.PLUGINS_BASE_PATH = '.';
 window.TEMPLATE_PATH = 'templates';
 window.DRAW_MATH_URL = 'math4/es5';
@@ -290,7 +298,11 @@ mxStencilRegistry.allowEval = false;
 			break;
 		}
 
-		mxmeta(null, 'default-src \'self\'; connect-src \'self\' https://fonts.googleapis.com https://fonts.gstatic.com; img-src * data:; ' +
+		// https://api.deepseek.com is allowed for the preset DeepSeek AI
+		// configuration in js/PreConfig.js. This meta policy wins over the
+		// header CSP only where it is more restrictive, so the host must be
+		// listed in every active policy
+		mxmeta(null, 'default-src \'self\'; connect-src \'self\' https://api.deepseek.com https://fonts.googleapis.com https://fonts.gstatic.com; img-src * data:; ' +
 			'media-src *; font-src * data:; frame-src \'self\'; style-src \'self\' \'unsafe-inline\' https://fonts.googleapis.com', 'Content-Security-Policy');
 
 		//Disable web plugins loading
