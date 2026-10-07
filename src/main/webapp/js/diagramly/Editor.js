@@ -508,6 +508,153 @@
 	};
 
 	/**
+	 * Protocol styles for BYO-key AI providers. The style selects the endpoint
+	 * path appended to a base URL, the request template used when a config does
+	 * not define its own, and how the response text is extracted. 'chat' is the
+	 * OpenAI-compatible Chat Completions API that most providers implement;
+	 * 'responses' is the OpenAI Responses API (OpenAI and DeepSeek support it,
+	 * most OpenAI-compatible providers do not).
+	 */
+	Editor.aiStyles = {
+		chat: {
+			endpoint: '/chat/completions',
+			request: {
+				model: '{model}',
+				messages: [
+					{role: 'system', content: '{action}'},
+					{role: 'user', content: '{prompt}'}
+				]
+			},
+			responsePath: '$.choices[0].message.content'
+		},
+		responses: {
+			endpoint: '/responses',
+			request: {
+				model: '{model}',
+				instructions: '{action}',
+				input: [
+					{role: 'user', content: '{prompt}'}
+				]
+			},
+			// No responsePath: the output array of the Responses API holds
+			// reasoning items before the message item in thinking mode, which
+			// the simple JSON path cannot skip (see Editor.getResponsesText)
+			responsePath: null
+		}
+	};
+
+	/**
+	 * Returns the protocol style of the given AI configuration. Defaults to
+	 * the OpenAI-compatible Chat Completions API.
+	 */
+	Editor.getAiStyle = function(config)
+	{
+		var style = (config != null) ? config.style : null;
+
+		if (style == null || style == '' || Editor.aiStyles[style] == null)
+		{
+			style = 'chat';
+		}
+
+		return style;
+	};
+
+	/**
+	 * Returns true if the given URL is a base URL rather than an endpoint URL.
+	 * Base URLs have either no path ('https://api.deepseek.com') or only a
+	 * version segment ('https://api.openai.com/v1',
+	 * 'https://api.groq.com/openai/v1'). Anything else (a full endpoint URL, a
+	 * proxy path or an Azure URL with a query string) is used verbatim, so all
+	 * existing configurations keep working.
+	 */
+	Editor.isAiBaseUrl = function(url)
+	{
+		// Removes scheme and authority
+		var path = url.replace(/^[a-z][a-z0-9+.\-]*:\/\/[^\/]*/i, '');
+
+		if (path.indexOf('?') >= 0 || path.indexOf('#') >= 0)
+		{
+			return false;
+		}
+
+		path = path.replace(/\/+$/, '');
+
+		return path == '' || /\/v\d+(\.\d+)*$/.test(path);
+	};
+
+	/**
+	 * Appends the endpoint path of the given style to a base URL, so the URL
+	 * configuration accepts the base_url of the providers' documentation
+	 * ('https://api.deepseek.com', 'https://api.openai.com/v1') as well as a
+	 * full endpoint URL. Trailing slashes are removed first.
+	 */
+	Editor.normalizeAiEndpoint = function(url, style)
+	{
+		if (url != null)
+		{
+			style = Editor.getAiStyle({style: style});
+			url = mxUtils.trim(String(url));
+
+			while (url.length > 0 && url.charAt(url.length - 1) == '/')
+			{
+				url = url.substring(0, url.length - 1);
+			}
+
+			if (url.length > 0 && Editor.isAiBaseUrl(url))
+			{
+				var styleConfig = Editor.aiStyles[style];
+
+				url += (styleConfig != null) ? styleConfig.endpoint :
+					Editor.aiStyles.chat.endpoint;
+			}
+		}
+
+		return url;
+	};
+
+	/**
+	 * Extracts the assistant text from an OpenAI Responses API result. The
+	 * output array lists reasoning items before the message item in thinking
+	 * mode (which DeepSeek enables by default), so the message is searched from
+	 * the end instead of using a fixed JSON path.
+	 */
+	Editor.getResponsesText = function(response)
+	{
+		var result = null;
+
+		if (response != null && Array.isArray(response.output))
+		{
+			for (var i = response.output.length - 1; i >= 0 && result == null; i--)
+			{
+				var item = response.output[i];
+
+				if (item != null && item.type == 'message' && Array.isArray(item.content))
+				{
+					var text = '';
+
+					for (var j = 0; j < item.content.length; j++)
+					{
+						var part = item.content[j];
+
+						if (part != null && typeof part.text === 'string' &&
+							(part.type == 'output_text' || part.type == 'text'))
+						{
+							text += part.text;
+						}
+					}
+
+					if (text.length > 0)
+					{
+						result = text;
+					}
+				}
+			}
+		}
+
+		return result;
+	};
+
+	/**
 	 * Adds a list of available AI models.
 	 */
 	Editor.aiModels = [
@@ -3656,6 +3803,23 @@
 			if (config.gptUrl != null && Editor.aiConfigs['gpt'] != null)
 			{
 				Editor.aiConfigs['gpt'].endpoint = config.gptUrl;
+			}
+
+			if (config.gptStyle != null && Editor.aiConfigs['gpt'] != null)
+			{
+				// The style also selects the request shape and how the response
+				// text is read: the built-in gpt config ships the Chat
+				// Completions body, which the Responses API does not accept.
+				// A custom aiConfigs entry is applied further down and wins.
+				var gptStyleConfig = Editor.aiStyles[Editor.getAiStyle({style: config.gptStyle})];
+
+				Editor.aiConfigs['gpt'].style = config.gptStyle;
+
+				if (gptStyleConfig != null)
+				{
+					Editor.aiConfigs['gpt'].request = gptStyleConfig.request;
+					Editor.aiConfigs['gpt'].responsePath = gptStyleConfig.responsePath;
+				}
 			}
 
 			if (config.aiActions != null)

@@ -11907,9 +11907,9 @@ var ChatWindow = function(editorUi, x, y, w, h)
 
 	// Prepends the recorded conversation turns to the request so the model
 	// can refine its previous answer. Provider request shapes differ, so the
-	// two known shapes are handled explicitly (OpenAI/Claude 'messages',
-	// Gemini 'contents'); an unknown shape falls back to a single-shot
-	// request.
+	// known shapes are handled explicitly (OpenAI/Claude 'messages', Gemini
+	// 'contents', OpenAI Responses 'input'); an unknown shape falls back to a
+	// single-shot request.
 	var threadHistory = function(params, turns)
 	{
 		if (params != null && turns != null && turns.length > 0)
@@ -11942,6 +11942,21 @@ var ChatWindow = function(editorUi, x, y, w, h)
 				}
 
 				params.contents = headC.concat(histContents, [currentC]);
+			}
+			else if (Array.isArray(params.input) && params.input.length > 0)
+			{
+				// The Responses API is stateless, so the whole conversation has
+				// to be resent in input on every request
+				var currentI = params.input[params.input.length - 1];
+				var headI = params.input.slice(0, params.input.length - 1);
+				var histInput = [];
+
+				for (var i = 0; i < turns.length; i++)
+				{
+					histInput.push({role: turns[i].role, content: turns[i].content});
+				}
+
+				params.input = headI.concat(histInput, [currentI]);
 			}
 		}
 	};
@@ -12201,6 +12216,8 @@ var ChatWindow = function(editorUi, x, y, w, h)
 		{
 			var aiModel = backend.model;
 			var config = Editor.aiConfigs[aiModel.config];
+			var style = Editor.getAiStyle(config);
+			var styleConfig = Editor.aiStyles[style];
 
 			var resolver = function(name)
 			{
@@ -12238,7 +12255,10 @@ var ChatWindow = function(editorUi, x, y, w, h)
 				return value;
 			};
 
-			var params = populateTemplate(config.request, resolver);
+			// The protocol style provides the request shape for configs that do
+			// not define their own (the built-in gpt/gemini/claude configs do)
+			var params = populateTemplate((config.request != null) ?
+				config.request : styleConfig.request, resolver);
 			threadHistory(params, historyTurns);
 
 			processMessage = function()
@@ -12253,7 +12273,11 @@ var ChatWindow = function(editorUi, x, y, w, h)
 						handleError(e);
 					};
 
-					var url = Editor.replacePlaceholders(config.endpoint, resolver);
+					// A base URL (eg. https://api.deepseek.com) gets the endpoint
+					// path of the protocol style appended; a full endpoint URL is
+					// used verbatim
+					var url = Editor.normalizeAiEndpoint(Editor.replacePlaceholders(
+						config.endpoint, resolver), style);
 					var req = new mxXmlRequest(url, JSON.stringify(params), 'POST');
 
 					req.setRequestHeaders = function(request, params)
@@ -12279,10 +12303,25 @@ var ChatWindow = function(editorUi, x, y, w, h)
 								if (req.getStatus() >= 200 && req.getStatus() <= 299)
 								{
 									var response = JSON.parse(req.getText());
-									var result = Editor.executeSimpleJsonPath(
-										response, config.responsePath);
-									var text = mxUtils.trim((result.length > 0) ?
-										result[0] : req.getText());
+									var text = null;
+
+									if (config.responsePath != null)
+									{
+										var result = Editor.executeSimpleJsonPath(
+											response, config.responsePath);
+										text = (result.length > 0) ? result[0] : null;
+									}
+
+									// Responses API results hold the text in the
+									// output array, which needs a search because
+									// thinking mode prepends reasoning items
+									if (text == null && style == 'responses')
+									{
+										text = Editor.getResponsesText(response);
+									}
+
+									text = mxUtils.trim((text != null) ?
+										text : req.getText());
 									var dt = Date.now() - t0;
 									EditorUi.debug('EditorUi.ChatWindow.response',
 										'params', params, 'response', response,

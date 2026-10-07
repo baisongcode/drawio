@@ -24,25 +24,25 @@ window.DRAW_MATH_URL = 'math4/es5';
 // Security Policy: src/main/electron.js, js/bootstrap.js and
 // js/diagramly/ElectronApp.js (all patched in this fork).
 //
-// gptUrl must be the FULL endpoint URL: draw.io POSTs it verbatim (Dialogs.js),
-// it never appends a path. The "base_url" in the DeepSeek docs table
-// (https://api.deepseek.com) is for SDKs, which add /chat/completions
-// themselves - putting it here posts to the root path and returns 404. The
-// value below is the URL used in the docs' own curl example, and the model
-// names are the ones the docs list for POST /chat/completions.
+// gptUrl accepts the base_url from the providers' documentation
+// (https://api.deepseek.com) or a full endpoint URL: a base URL (no path, or
+// only a version segment such as https://api.openai.com/v1) gets the endpoint
+// path of the configured API style appended (see Editor.normalizeAiEndpoint),
+// anything else is used verbatim. gptStyle selects the style and defaults to
+// 'chat' (POST /chat/completions, {model, messages}); 'responses' uses the
+// OpenAI Responses API (POST /responses, {model, instructions, input}).
 //
 // Thinking mode defaults to enabled on DeepSeek's side (thinking.type defaults
 // to "enabled"), so responses take longer than non-thinking mode; draw.io gives
 // a request 90s (Editor.prototype.generateTimeout), which a long thinking
-// generation can exceed. Switching to non-thinking mode needs a custom
-// aiConfigs entry with "thinking": {"type": "disabled"}, because the built-in
-// "gpt" provider only sends {model, messages}.
+// generation can exceed. Non-thinking mode can be selected with a custom
+// aiConfigs entry that adds "thinking": {"type": "disabled"} to the request.
 //
 // Set your key below (https://platform.deepseek.com/api_keys). gptApiKey is
 // what makes the models appear in the Generate dialog's model selector: only
 // models whose aiConfigs[..].apiKey entry is non-null are offered (Dialogs.js).
-// The "gpt" request body and responsePath ($.choices[0].message.content) are
-// accepted by DeepSeek as-is, so no aiConfigs override is needed.
+// The model names and endpoint are the ones the DeepSeek docs list for
+// POST /chat/completions.
 //
 // A Configuration saved in Extras > Configuration (localStorage) is applied
 // after this global and overrides the same keys, so leave that empty or merge
@@ -52,7 +52,8 @@ window.DRAWIO_DEEPSEEK_API_KEY = 'sk-YOUR-KEY';
 window.DRAWIO_CONFIG = {
 	enableAi: true,
 	gptApiKey: window.DRAWIO_DEEPSEEK_API_KEY,
-	gptUrl: 'https://api.deepseek.com/chat/completions',
+	gptUrl: 'https://api.deepseek.com',
+	gptStyle: 'chat',
 	aiModels: [
 		{name: 'DeepSeek Flash', model: 'deepseek-flash', config: 'gpt'},
 		{name: 'DeepSeek V4 Pro', model: 'deepseek-v4-pro', config: 'gpt'}
